@@ -1,0 +1,38 @@
+{
+  "name": "jev-emoji",
+  "version": "0.1.0",
+  "description": "Pick an emoji for a piece of text using TypeSafe's Jev model",
+  "keywords": [
+    "emoji",
+    "jev",
+    "typesafe",
+    "classification",
+    "llm"
+  ],
+  "author": "D C P Revere <dcprevere@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DCPRevere/jev-emoji.git"
+  },
+  "homepage": "https://github.com/DCPRevere/jev-emoji#readme",
+  "bugs": {
+    "url": "https://github.com/DCPRevere/jev-emoji/issues"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "engines": {
+    "node": ">=20.3"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "MIT"
+}
