@@ -1,14 +1,15 @@
 /**
  * Default candidates: emoji → when it applies. Jev's choice questions accept at most
  * 255 criteria, so keep any custom set under that.
+ * Use `emojis: "full"` for every Unicode emoji (see emojis-full.js).
  */
 export const DEFAULT_EMOJIS = {
   "😀": "Happy, cheerful or good news",
   "😂": "Something funny or a joke",
-  "🥰": "Affection, love for a person",
-  "😍": "Admiration, adoring something",
+  "😍": "Admiring or adoring something",
   "😎": "Cool, confident or relaxed",
   "🤔": "A question, puzzle or thinking something over",
+  "🤷": "Unsure or doesn't matter",
   "😐": "Neutral, indifferent or unremarkable",
   "🙄": "Annoyance, sarcasm or eye-rolling",
   "😴": "Tired, sleepy or bored",
@@ -19,7 +20,7 @@ export const DEFAULT_EMOJIS = {
   "😬": "Awkward, nervous or a near miss",
   "🤒": "Ill, sick or unwell",
   "🤯": "Mind-blown or astonished",
-  "🥳": "Celebration, party or birthday",
+  "🥳": "Celebration or party",
   "🙏": "Thanks, gratitude, a plea or prayer",
   "👍": "Approval, agreement or acknowledgement",
   "👎": "Disapproval or rejection",
@@ -27,11 +28,12 @@ export const DEFAULT_EMOJIS = {
   "👋": "Greeting or farewell",
   "💪": "Strength, effort, exercise or encouragement",
   "🤝": "Deal, agreement or partnership",
-  "❤️": "Love or heartfelt warmth",
+  "❤️": "Love or affection for a person",
   "💔": "Heartbreak or a break-up",
   "🔥": "Exciting, impressive or literally fire",
   "✨": "Something new, special or shiny",
   "🎉": "Announcement, achievement or launch",
+  "🏆": "Winning or an award",
   "🎁": "Gift or present",
   "🎂": "Birthday or cake",
   "🎄": "Christmas",
@@ -44,7 +46,8 @@ export const DEFAULT_EMOJIS = {
   "❌": "Failed, cancelled or wrong",
   "🐛": "Software bug or defect",
   "🛠️": "Fixing, repairing or maintenance",
-  "🚀": "Shipping, release or fast progress",
+  "🚀": "Release, launch or fast progress",
+  "💼": "Job, career or office work",
   "💻": "Computers, programming or work at a desk",
   "📱": "Phones or apps",
   "🔒": "Security, privacy or passwords",
@@ -91,6 +94,5 @@ export const DEFAULT_EMOJIS = {
   "📰": "News",
   "⚖️": "Law, legal or justice",
   "🧹": "Cleaning or tidying up",
-  "💤": "Sleep or rest",
   "🙈": "Embarrassment or not wanting to look",
 };

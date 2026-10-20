@@ -1,7 +1,7 @@
 {
   "name": "jev-emoji",
-  "version": "0.1.0",
-  "description": "Pick an emoji for a piece of text using TypeSafe's Jev model",
+  "version": "0.2.0",
+  "description": "Pick an emoji for a piece of text using TypeSafe's Jev model — curated or every Unicode emoji",
   "keywords": [
     "emoji",
     "jev",
@@ -19,20 +19,26 @@
     "url": "https://github.com/DCPRevere/jev-emoji/issues"
   },
   "type": "module",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
   "exports": {
     ".": {
       "types": "./src/index.d.ts",
       "default": "./src/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "src"
   ],
   "engines": {
-    "node": ">=20.3"
+    "node": ">=20.19"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "prepublishOnly": "npm test",
+    "build:emojis": "node scripts/build-full-emojis.js"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "sideEffects": false
 }

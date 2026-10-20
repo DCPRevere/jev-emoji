@@ -1,30 +1,32 @@
 # jev-emoji
 
 Pick an emoji for a piece of text with TypeSafe's [Jev](https://docs.typesafe.ai/api.md) model.
-No dependencies; needs `fetch` and `AbortSignal.any` (Node 20.3+ or a modern browser).
+No dependencies; ESM; Node 20.19+ (or anything with `fetch` and `AbortSignal.any`).
 
-```js
-import { pickEmoji, createEmojiPicker } from "jev-emoji";
-
-await pickEmoji("I got the job!"); // "🎉"  (key from TYPESAFE_API_KEY)
-
-const picker = createEmojiPicker({
-  apiKey: "…",
-  threshold: 0.6,          // below this, `emoji` is `fallback`
-  fallback: "💬",
-  emojis: { "🐛": "A bug report", "🚀": "A release", "❓": "A question" }, // or ["🐛", "🚀"]
-});
-await picker.pick("Crash on login");      // { emoji, choice, confidence, ranked, probabilities, model }
-await picker.pickMany(["a", "b", "c"]);   // sent 5 per request; Jev drifts on long batches
-
-// Every emoji's probability, most likely first; trim with `top` and/or `minProbability`
-// (set on the picker or per call).
-const { ranked } = await picker.pick("Crash on login", { top: 3, minProbability: 0.05 });
-// [{ emoji: "🐛", probability: 0.82 }, { emoji: "❓", probability: 0.12 }, …]
-
-await pickEmojis("I got the job!", { top: 3 }); // ["🎉", "🥳", "😀"]
+```sh
+npm i jev-emoji
+export TYPESAFE_API_KEY=…   # from https://typesafe.ai
 ```
 
-- Default set: ~90 everyday emojis in `src/emojis.js`. Jev allows at most 255 choices.
-- Retries 429/529/5xx, network errors and timeouts (3 attempts); throws `JevError` otherwise.
-- `npm test` runs offline against a fake `fetch`.
+> Your text is sent to TypeSafe's paid API. Call it from a server; never ship your key to a browser.
+
+```js
+import { pickEmoji, rankEmojis, createEmojiPicker, JevError } from "jev-emoji";
+
+await pickEmoji("I got the job!");               // "🎉"
+await rankEmojis("I got the job!", { top: 3 });  // ["🎉", "💼", "🥳"]
+
+const picker = createEmojiPicker({
+  emojis: "full",       // "lite" (default, ~90 curated), "full" (all ~1,900), a list, or { emoji: "when it applies" }
+  minConfidence: 0.6,   // below this, `emoji` is `fallback`
+  fallback: "💬",
+});
+await picker.pick("Crash on login");
+// { emoji, choice, confidence, ranked: [{ emoji, probability }, …top 5], probabilities, model }
+await picker.pickMany(["a", "b", "c"], { top: 3, minProbability: 0.05 });
+```
+
+- **lite** asks one question. **full** asks two (2 requests): which of 99 Unicode categories, then which emoji within the 3 likeliest (`categories` option). Jev allows at most 255 choices per question, which is why full mode goes through categories.
+- `pickMany` sends `batchSize` (5) texts per request; Jev drifts on long batches.
+- Retries 408/429/5xx/529, network errors and timeouts (`attempts`: 3), honouring `Retry-After`. Failures throw `JevError` (`status`, `body`, `cause`); aborts reject with the signal's reason.
+- All options are documented in [`src/index.d.ts`](src/index.d.ts).

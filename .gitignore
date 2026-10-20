@@ -1,3 +1,4 @@
 node_modules/
 *.tgz
 .env
+emoji-test.txt
