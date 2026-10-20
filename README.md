@@ -5,7 +5,7 @@ No dependencies; ESM; Node 20.19+ (or anything with `fetch` and `AbortSignal.any
 
 ```sh
 npm i jev-emoji
-export TYPESAFE_API_KEY=…   # from https://typesafe.ai
+export TYPESAFE_API_KEY=…   # from https://console.typesafe.ai/keys, or pass { apiKey }
 ```
 
 > Your text is sent to TypeSafe's paid API. Call it from a server; never ship your key to a browser.
