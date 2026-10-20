@@ -180,8 +180,11 @@ test("retries network errors, then wraps them in JevError", async () => {
 });
 
 test("times out a hung request", async () => {
-  const hang = (_, init) => new Promise((_, reject) =>
-    init.signal.addEventListener("abort", () => reject(init.signal.reason)));
+  // Like a real socket, keep the event loop alive: AbortSignal.timeout's timer doesn't.
+  const hang = (_, init) => new Promise((_, reject) => {
+    const socket = setInterval(() => {}, 1000);
+    init.signal.addEventListener("abort", () => { clearInterval(socket); reject(init.signal.reason); });
+  });
   const fetch = fakeFetch(hang);
   await assert.rejects(createEmojiPicker(opts(fetch, { timeoutMs: 20, attempts: 2 })).pick("x"),
     (e) => e instanceof JevError && /timed out/.test(e.message) && e.status === undefined);
