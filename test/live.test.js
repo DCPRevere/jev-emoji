@@ -1,4 +1,5 @@
-// Calls the real Jev API (billed). Runs only when TYPESAFE_API_KEY is set.
+// Calls the real Jev API (billed). Runs only when TYPESAFE_API_KEY is set, e.g. via
+// `npm run test:live`, which reads it from .env (gitignored).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createEmojiPicker, DEFAULT_EMOJIS } from "../src/index.js";
@@ -31,7 +32,7 @@ test("lite: one pick and a two-text batch", { skip }, async () => {
   assert.equal(Object.keys(fetch.raw[0].answers.emoji.probabilities).length, Object.keys(DEFAULT_EMOJIS).length);
 });
 
-test("full: category then emoji", { skip }, async () => {
+test("full: knockout then final", { skip }, async () => {
   const r = await createEmojiPicker({ emojis: "full" }).pick("We won the cup final!");
   assert.ok(r.emoji, "picked something");
   assert.ok(r.ranked.length > 1);

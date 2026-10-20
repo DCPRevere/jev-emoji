@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createEmojiPicker, pickEmoji, rankEmojis, JevError } from "../src/index.js";
+import { createEmojiPicker, pickEmoji, rankEmojis, JevError, DEFAULT_EMOJIS } from "../src/index.js";
+
+const LITE = Object.keys(DEFAULT_EMOJIS).length;
 
 /** Fake fetch: each handler answers one call (the last repeats); records request bodies. */
 function fakeFetch(...handlers) {
@@ -97,14 +99,14 @@ test("ranks offered emojis, most likely first, top 5 by default", async () => {
   const r = await pickWith(prefer(SPREAD)).pick("x");
   assert.equal(r.ranked.length, 5);
   assert.deepEqual(r.ranked.slice(0, 2), [{ emoji: "🎉", probability: 0.6 }, { emoji: "🥳", probability: 0.3 }]);
-  assert.equal(Object.keys(r.probabilities).length, 91);
+  assert.equal(Object.keys(r.probabilities).length, LITE);
 });
 
 test("top and minProbability trim the ranking, per picker or per call", async () => {
   const picker = pickWith(prefer(SPREAD), { top: 1 });
   assert.deepEqual((await picker.pick("x")).ranked.map((e) => e.emoji), ["🎉"]);
   assert.deepEqual((await picker.pick("x", { top: 3, minProbability: 0.1 })).ranked.map((e) => e.emoji), ["🎉", "🥳"]);
-  assert.equal((await picker.pick("x", { top: Infinity })).ranked.length, 91);
+  assert.equal((await picker.pick("x", { top: Infinity })).ranked.length, LITE);
   const many = await picker.pickMany(["a", "b"], { top: 2 });
   assert.deepEqual(many.map((r) => r.ranked.map((e) => e.emoji)), [["🎉", "🥳"], ["🎉", "🥳"]]);
 });
@@ -117,32 +119,33 @@ test("pickEmoji returns just the emoji", async () => {
   assert.equal(await pickEmoji("yay", opts(fakeFetch(prefer({ "🥳": 0.9 })))), "🥳");
 });
 
-test("full mode: picks categories, then searches the likeliest ones in one request", async () => {
-  const fetch = fakeFetch(prefer({ "event": 0.6, "award-medal": 0.3, "face-smiling": 0.1, "🎉": 0.8, "🏆": 0.7, "😀": 1 }));
+test("full mode: a knockout over every emoji, then a final among each group's best", async () => {
+  const fetch = fakeFetch(prefer({ "🎉": 0.8, "🥳": 0.1, "🏆": 0.7, "🦩": 0.5, "🇮🇹": 0.9 }));
   const r = await createEmojiPicker(opts(fetch, { emojis: "full" })).pick("We won the cup!");
 
   assert.equal(fetch.calls.length, 2);
-  assert.equal(Object.keys(fetch.calls[0].body.questions.category.criteria).length, 99);
-  const search = fetch.calls[1].body;
-  assert.equal(search.state, "We won the cup!");
-  assert.deepEqual(Object.keys(search.questions), ["category_0", "category_1", "category_2"]);
-  assert.ok("🎉" in search.questions.category_0.criteria);
-  assert.ok("🏆" in search.questions.category_1.criteria);
+  const groups = Object.values(fetch.calls[0].body.questions).map((q) => Object.keys(q.criteria));
+  assert.equal(groups.length, 8);
+  assert.ok(groups.every((g) => g.length <= 255));
+  assert.equal(new Set(groups.flat()).size, groups.flat().length);
+  assert.ok(groups.flat().length > 1900);
+  assert.equal(fetch.calls[0].body.state, "We won the cup!");
+  // curated emojis keep their "when it applies" description
+  assert.equal(fetch.calls[0].body.questions.group_0.criteria["😀"], DEFAULT_EMOJIS["😀"]);
 
-  assert.equal(r.emoji, "🎉");
-  assert.equal(r.confidence, 0.6 * 0.8);
-  assert.deepEqual(r.ranked.slice(0, 3).map((e) => e.emoji), ["🎉", "🏆", "😀"]);
-  assert.equal(r.ranked[1].probability, 0.3 * 0.7);
+  const final = Object.keys(fetch.calls[1].body.questions.emoji.criteria);
+  assert.equal(final.length, 16); // 2 from each of 8 groups
+  for (const e of ["🎉", "🥳", "🏆", "🦩", "🇮🇹"]) assert.ok(final.includes(e), e);
+  assert.equal(r.emoji, "🇮🇹");
+  assert.deepEqual(r.ranked.slice(0, 3).map((e) => e.emoji), ["🇮🇹", "🎉", "🏆"]);
+  assert.equal(Object.keys(r.probabilities).length, 16);
 });
 
-test("full mode: categories option and pickMany", async () => {
-  const fetch = fakeFetch(prefer({ "event": 0.6, "award-medal": 0.3, "🎉": 0.8 }));
-  const picker = createEmojiPicker(opts(fetch, { emojis: "full", categories: 1 }));
-  const results = await picker.pickMany(["a", "b"]);
-
-  assert.equal(fetch.calls.length, 3); // one category request for both texts, one search each
-  assert.deepEqual(Object.keys(fetch.calls[0].body.questions), ["text_0", "text_1"]);
-  assert.deepEqual(Object.keys(fetch.calls[1].body.questions), ["category_0"]);
+test("full mode: finalists option and pickMany", async () => {
+  const fetch = fakeFetch(prefer({ "🎉": 0.8 }));
+  const results = await createEmojiPicker(opts(fetch, { emojis: "full", finalists: 1 })).pickMany(["a", "b"]);
+  assert.equal(fetch.calls.length, 4); // two requests per text
+  assert.equal(Object.keys(fetch.calls[1].body.questions.emoji.criteria).length, 8);
   assert.deepEqual(results.map((r) => r.emoji), ["🎉", "🎉"]);
 });
 
@@ -226,7 +229,7 @@ test("validates options and inputs before sending anything", async () => {
   assert.throws(make({ emojis: ["🎉"] }), /at least two/);
   assert.throws(make({ emojis: Array.from({ length: 256 }, (_, i) => String.fromCodePoint(0x1f600 + i)) }), /at most 255/);
   assert.throws(make({ emojis: "🎉😀" }), TypeError);
-  for (const bad of [{ batchSize: 0 }, { batchSize: "5" }, { attempts: 0 }, { top: -1 }, { categories: 0 },
+  for (const bad of [{ batchSize: 0 }, { batchSize: "5" }, { attempts: 0 }, { top: -1 }, { finalists: 0 },
     { minProbability: 2 }, { minConfidence: -0.1 }, { timeoutMs: Infinity }]) {
     assert.throws(make(bad), RangeError, JSON.stringify(bad));
   }

@@ -17,7 +17,7 @@ await pickEmoji("I got the job!");               // "🎉"
 await rankEmojis("I got the job!", { top: 3 });  // ["🎉", "💼", "🥳"]
 
 const picker = createEmojiPicker({
-  emojis: "full",       // "lite" (default, ~90 curated), "full" (all ~1,900), a list, or { emoji: "when it applies" }
+  emojis: "full",       // "lite" (default, ~250 curated), "full" (all ~1,900), a list, or { emoji: "when it applies" }
   minConfidence: 0.6,   // below this, `emoji` is `fallback`
   fallback: "💬",
 });
@@ -26,7 +26,8 @@ await picker.pick("Crash on login");
 await picker.pickMany(["a", "b", "c"], { top: 3, minProbability: 0.05 });
 ```
 
-- **lite** asks one question. **full** asks two (2 requests): which of 99 Unicode categories, then which emoji within the 3 likeliest (`categories` option). Jev allows at most 255 choices per question, which is why full mode goes through categories.
-- `pickMany` sends `batchSize` (5) texts per request; Jev drifts on long batches.
+- **lite** (default) offers ~250 hand-picked emojis, each described by when it applies, in one question. About 7k tokens per text.
+- **full** offers every Unicode emoji. Jev allows at most 255 choices per question, so it's a knockout: 8 groups each send their top 2 (`finalists`) to a final question. Similar accuracy, more specific picks (🛬 rather than ✈️), but two requests and about 50k tokens per text.
+- `pickMany` sends `batchSize` (5) texts per request in lite mode; Jev drifts on long batches.
 - Retries 408/429/5xx/529, network errors and timeouts (`attempts`: 3), honouring `Retry-After`. Failures throw `JevError` (`status`, `body`, `cause`); aborts reject with the signal's reason.
 - All options are documented in [`src/index.d.ts`](src/index.d.ts).

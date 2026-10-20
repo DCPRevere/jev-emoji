@@ -6,9 +6,9 @@ export interface PickerOptions {
   /** Model name or alias. Default `"jev-latest"`. */
   model?: string;
   /**
-   * Candidate emojis. `"lite"` (default): ~90 curated everyday emojis, one request.
-   * `"full"`: all ~1,900 Unicode emojis (no skin tones), two requests — pick a
-   * category, then an emoji within the likeliest `categories`.
+   * Candidate emojis. `"lite"` (default): ~250 curated emojis described by when they
+   * apply; one request. `"full"`: all ~1,900 Unicode emojis (no skin tones) as a
+   * knockout — 8 groups each put `finalists` into a final; two requests per text.
    * Or your own list, or emoji → description of when it applies (2–255).
    */
   emojis?: "lite" | "full" | readonly string[] | Readonly<Record<string, string | null>>;
@@ -20,9 +20,9 @@ export interface PickerOptions {
   top?: number;
   /** Default for `CallOptions.minProbability`. Default 0. */
   minProbability?: number;
-  /** `"full"` only: how many of the likeliest categories to search. Default 3. */
-  categories?: number;
-  /** Texts per request in `pickMany`. Default 5. */
+  /** `"full"` only: emojis each group sends to the final. Default 2. */
+  finalists?: number;
+  /** Texts per request in `pickMany` (`"lite"` and custom sets). Default 5. */
   batchSize?: number;
   /** Per-attempt timeout. Default 30000. */
   timeoutMs?: number;
@@ -44,14 +44,10 @@ export interface PickResult {
   emoji: string | null;
   /** Jev's choice regardless of `minConfidence`; `null` if it wasn't offered. */
   choice: string | null;
-  /** In `"full"` mode: category probability × confidence within it. */
   confidence: number;
   /** Most likely first, after `top` and `minProbability`. */
   ranked: RankedEmoji[];
-  /**
-   * Probability of each offered emoji. In `"full"` mode only emojis in the searched
-   * categories, as category probability × probability within it.
-   */
+  /** Probability of each offered emoji; in `"full"` mode, of each finalist. */
   probabilities: Record<string, number>;
   /** Resolved model, e.g. `"jev-1.13.0"`. */
   model: string;

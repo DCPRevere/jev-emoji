@@ -29,7 +29,7 @@ export function createEmojiPicker(options = {}) {
     fallback = null,
     top = 5,
     minProbability = 0,
-    categories = 3,
+    finalists = 2,
     batchSize = 5,
     timeoutMs = 30_000,
     attempts = 3,
@@ -42,7 +42,7 @@ export function createEmojiPicker(options = {}) {
   if (typeof fetchImpl !== "function") throw new TypeError("No fetch implementation available");
   checkInteger("batchSize", batchSize, 1);
   checkInteger("attempts", attempts, 1);
-  checkInteger("categories", categories, 1);
+  checkInteger("finalists", finalists, 1);
   checkRank(top, minProbability);
   checkFraction("minConfidence", minConfidence);
   if (!(timeoutMs > 0 && Number.isFinite(timeoutMs))) throw new RangeError("timeoutMs must be a positive number");
@@ -50,13 +50,22 @@ export function createEmojiPicker(options = {}) {
 
   const full = emojis === "full";
   const criteria = full ? null : toCriteria(emojis === "lite" ? DEFAULT_EMOJIS : emojis);
-  let fullSet; // loaded on first use so "lite" users never parse ~2,000 emojis
+  let fullGroups; // loaded on first use so "lite" users never parse ~2,000 emojis
 
+  /**
+   * Every Unicode emoji, split into the fewest groups Jev accepts (≤255 each) in Unicode
+   * order. Curated emojis keep their "when it applies" description; the rest have their
+   * Unicode name, which says what it looks like rather than what it's for.
+   */
   function loadFull() {
-    return fullSet ??= import("./emojis-full.js").then(({ FULL_EMOJIS }) => ({
-      categories: Object.fromEntries(Object.entries(FULL_EMOJIS).map(([id, c]) => [id, c.description])),
-      emojis: Object.fromEntries(Object.entries(FULL_EMOJIS).map(([id, c]) => [id, c.emojis])),
-    }));
+    return fullGroups ??= import("./emojis-full.js").then(({ FULL_EMOJIS }) => {
+      const curated = new Map(Object.entries(DEFAULT_EMOJIS).map(([emoji, use]) => [bare(emoji), use]));
+      const entries = Object.entries(FULL_EMOJIS).map(([emoji, name]) => [emoji, curated.get(bare(emoji)) ?? name]);
+      const size = Math.ceil(entries.length / Math.ceil(entries.length / MAX_CHOICES));
+      const groups = [];
+      for (let i = 0; i < entries.length; i += size) groups.push(Object.fromEntries(entries.slice(i, i + size)));
+      return groups;
+    });
   }
 
   async function send(body, signal) {
@@ -99,46 +108,42 @@ export function createEmojiPicker(options = {}) {
   }
 
   /** Ask one choice question per text; returns `[{ answer, model }]` in order. */
-  async function ask(texts, choices, about, signal) {
+  async function ask(texts, choices, signal) {
     const question = (instructions) => ({ type: "choice", instructions, criteria: choices });
     const single = texts.length === 1;
     const json = await send(single
-      ? { model, state: texts[0], questions: { [about]: question(`Which ${about} best fits this text?`) } }
+      ? { model, state: texts[0], questions: { emoji: question("Which emoji best fits this text?") } }
       : {
         model,
         state: { texts },
-        questions: Object.fromEntries(texts.map((_, i) => [`text_${i}`, question(`Which ${about} best fits \`texts[${i}]\`?`)])),
+        questions: Object.fromEntries(texts.map((_, i) => [`text_${i}`, question(`Which emoji best fits \`texts[${i}]\`?`)])),
       }, signal);
-    return texts.map((_, i) => ({ answer: answerOf(json, single ? about : `text_${i}`), model: json.model ?? model }));
+    return texts.map((_, i) => ({ answer: answerOf(json, single ? "emoji" : `text_${i}`), model: json.model ?? model }));
   }
 
-  /** Full mode, second step: search the likeliest categories for `text`, all in one request. */
-  async function searchCategories(text, category, set, signal) {
-    const ids = Object.entries(category.probabilities)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, categories)
-      .map(([id]) => id);
+  /**
+   * Full mode: one request asks every group for its best emoji; the top `finalists` of
+   * each go into a final question, whose answer is the result.
+   */
+  async function knockout(text, groups, signal) {
     const json = await send({
       model,
       state: text,
-      questions: Object.fromEntries(ids.map((id, i) => [`category_${i}`, {
+      questions: Object.fromEntries(groups.map((group, i) => [`group_${i}`, {
         type: "choice",
         instructions: "Which emoji best fits this text?",
-        criteria: set.emojis[id],
+        criteria: group,
       }])),
     }, signal);
-    const probabilities = {};
-    let best = null;
-    ids.forEach((id, i) => {
-      const answer = offered(answerOf(json, `category_${i}`), set.emojis[id]);
-      const weight = category.probabilities[id];
-      for (const [emoji, p] of Object.entries(answer.probabilities)) probabilities[emoji] = weight * p;
-      const score = answer.choice === null ? -1 : probabilities[answer.choice];
-      if (answer.choice !== null && (!best || score > best.score)) {
-        best = { score, choice: answer.choice, confidence: weight * answer.confidence };
+    const final = {};
+    groups.forEach((group, i) => {
+      const { probabilities } = offered(answerOf(json, `group_${i}`), group);
+      for (const [emoji] of Object.entries(probabilities).sort((a, b) => b[1] - a[1]).slice(0, finalists)) {
+        final[emoji] = group[emoji];
       }
     });
-    return { answer: { choice: best?.choice ?? null, confidence: best?.confidence ?? 0, probabilities }, model: json.model ?? model };
+    const [{ answer, model: usedModel }] = await ask([text], final, signal);
+    return { answer: offered(answer, final), model: usedModel };
   }
 
   function toResult({ choice, confidence, probabilities }, usedModel, n, min) {
@@ -158,24 +163,26 @@ export function createEmojiPicker(options = {}) {
   }
 
   /**
-   * Pick an emoji for each text, preserving order. Texts are sent `batchSize` at a time
-   * because Jev's answers drift on long batches.
+   * Pick an emoji for each text, preserving order. "lite" sends `batchSize` texts per
+   * request because Jev's answers drift on long batches; "full" takes two requests per text.
    */
   async function pickMany(texts, { signal, top: n = top, minProbability: min = minProbability } = {}) {
     if (!Array.isArray(texts) || texts.some((t) => typeof t !== "string")) {
       throw new TypeError("texts must be an array of strings");
     }
     checkRank(n, min);
-    const set = full ? await loadFull() : null;
     const results = [];
+    if (full) {
+      const groups = await loadFull();
+      for (const text of texts) {
+        const { answer, model: usedModel } = await knockout(text, groups, signal);
+        results.push(toResult(answer, usedModel, n, min));
+      }
+      return results;
+    }
     for (let start = 0; start < texts.length; start += batchSize) {
-      const chunk = texts.slice(start, start + batchSize);
-      const answers = await ask(chunk, full ? set.categories : criteria, full ? "category" : "emoji", signal);
-      for (const [i, { answer, model: usedModel }] of answers.entries()) {
-        const picked = full
-          ? await searchCategories(chunk[i], offered(answer, set.categories), set, signal)
-          : { answer: offered(answer, criteria), model: usedModel };
-        results.push(toResult(picked.answer, picked.model, n, min));
+      for (const { answer, model: usedModel } of await ask(texts.slice(start, start + batchSize), criteria, signal)) {
+        results.push(toResult(offered(answer, criteria), usedModel, n, min));
       }
     }
     return results;
@@ -195,7 +202,7 @@ export async function pickEmoji(text, options) {
   return (await createEmojiPicker(options).pick(text, options)).emoji;
 }
 
-/** One-off ranking: `await rankEmojis("I got the job!", { top: 3 })` → ["💼", "🎉", "🥳"]. */
+/** One-off ranking: `await rankEmojis("I got the job!", { top: 3 })` → ["🎉", "💼", "🥳"]. */
 export async function rankEmojis(text, options) {
   return (await createEmojiPicker(options).pick(text, options)).ranked.map((r) => r.emoji);
 }

@@ -36,6 +36,7 @@
   },
   "scripts": {
     "test": "node --test",
+    "test:live": "node --env-file=.env --test test/live.test.js",
     "prepublishOnly": "npm test",
     "build:emojis": "node scripts/build-full-emojis.js"
   },
